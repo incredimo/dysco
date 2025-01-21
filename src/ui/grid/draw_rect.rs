@@ -13,21 +13,17 @@ fn get_color_at_pos(x: u16, y: u16, width: u16, height: u16, is_file: bool) -> C
     let position = (x_ratio + (1.0 - y_ratio)) / 2.0;
 
     if is_file {
-        match (position * 1000.0) as u16 {
-            0..=200 => Color::Rgb(255, 121, 198),    // Pink
-            201..=400 => Color::Rgb(241, 134, 210),  // Pink-Purple
-            401..=600 => Color::Rgb(189, 147, 249),  // Purple
-            601..=800 => Color::Rgb(164, 190, 251),  // Purple-Cyan
-            _ => Color::Rgb(139, 233, 253),          // Cyan
-        }
+        // Simple pink to purple gradient for files
+        let r = (255.0 * (1.0 - position)) as u8;
+        let g = (130.0 * (1.0 - position)) as u8;
+        let b = (220.0 + (35.0 * position)) as u8;
+        Color::Rgb(r, g, b)
     } else {
-        match (position * 1000.0) as u16 {
-            0..=200 => Color::Rgb(139, 233, 253),    // Cyan
-            201..=400 => Color::Rgb(109, 241, 188),  // Cyan-Green
-            401..=600 => Color::Rgb(80, 250, 123),   // Green
-            601..=800 => Color::Rgb(167, 217, 115),  // Green-Orange
-            _ => Color::Rgb(255, 184, 108),          // Orange
-        }
+        // Simple cyan to green gradient for folders
+        let r = (80.0 * position) as u8;
+        let g = (250.0 * (1.0 - position)) as u8;
+        let b = (250.0 * position) as u8;
+        Color::Rgb(r, g, b)
     }
 }
 
@@ -36,12 +32,10 @@ fn get_shade_at_pos(x: u16, y: u16, width: u16, height: u16) -> &'static str {
     let y_ratio = y as f64 / height as f64;
     let position = (x_ratio + (1.0 - y_ratio)) / 2.0;
     
-    match (position * 1000.0) as u16 {
-        0..=200 => "░",
-        201..=400 => "▒",
-        401..=600 => "▒",
-        601..=800 => "▓",
-        _ => "█",
+    if position < 0.5 {
+        "█"
+    } else {
+        "█"
     }
 }
 
@@ -127,6 +121,9 @@ pub fn tile_style(tile: &Tile, selected: bool) -> (Option<Style>, Style, Style) 
     (background_style, first_line_style, second_line_style)
 }
 
+// Update border characters to use thick lines
+const BORDER_CHARS: &str = "┏┓┗┛┃━";
+
 pub fn draw_rect_on_grid(buf: &mut Buffer, coords: (u16, u16), dimensions: (u16, u16)) {
     let (x, y) = coords;
     let (width, height) = dimensions;
@@ -134,29 +131,41 @@ pub fn draw_rect_on_grid(buf: &mut Buffer, coords: (u16, u16), dimensions: (u16,
         return;
     }
 
-    for i in x..(x + width + 1) {
-        if i == x {
-            draw_next_symbol(buf, i, y, "╭");
-            draw_next_symbol(buf, i, y + height, "╰");
-        } else if i == x + width {
-            draw_next_symbol(buf, i, y, "╮");
-            draw_next_symbol(buf, i, y + height, "╯");
-        } else {
-            draw_next_symbol(buf, i, y, "─");
-            draw_next_symbol(buf, i, y + height, "─");
+    // Draw corners with thick borders
+    draw_next_symbol(buf, x, y, "┏");
+    draw_next_symbol(buf, x + width, y, "┓");
+    draw_next_symbol(buf, x, y + height, "┗");
+    draw_next_symbol(buf, x + width, y + height, "┛");
+
+    // Draw edges with thick lines
+    for i in x + 1..x + width {
+        draw_next_symbol(buf, i, y, "━");
+        draw_next_symbol(buf, i, y + height, "━");
+    }
+    for j in y + 1..y + height {
+        draw_next_symbol(buf, x, j, "┃");
+        draw_next_symbol(buf, x + width, j, "┃");
+    }
+}
+
+fn draw_small_files_rect_on_grid(buf: &mut Buffer, rect: Rect) {
+    // Use dots for small files area
+    for y in rect.y + 1..rect.y + rect.height {
+        for x in rect.x + 1..rect.x + rect.width {
+            let buf = buf.get_mut(x, y);
+            // Use centered dot for small files indicator
+            buf.set_symbol("·");
+            buf.set_style(Style::default().bg(Color::White).fg(Color::Black));
         }
     }
-
-    for j in (y + 1)..(y + height) {
-        draw_next_symbol(buf, x, j, "│");
-        draw_next_symbol(buf, x + width, j, "│");
-    }
+    // Draw thick borders around small files area
+    draw_rect_on_grid(buf, (rect.x, rect.y), (rect.width, rect.height));
 }
 
 pub fn draw_filled_rect(buf: &mut Buffer, fill_style: Style, rect: &Rect) {
     let is_file = fill_style.fg == Some(Color::Gray);
 
-    // Fill with granular gradient
+    // Fill with gradient
     for y in rect.y + 1..rect.y + rect.height {
         for x in rect.x + 1..rect.x + rect.width {
             let color = get_color_at_pos(
@@ -179,50 +188,41 @@ pub fn draw_filled_rect(buf: &mut Buffer, fill_style: Style, rect: &Rect) {
         }
     }
 
-    // Draw borders with matching gradient
-    let corners = [
-        (rect.x, rect.y, "╭"),
-        (rect.x + rect.width, rect.y, "╮"),
-        (rect.x, rect.y + rect.height, "╰"),
-        (rect.x + rect.width, rect.y + rect.height, "╯")
-    ];
-
-    for (x, y, symbol) in corners {
-        let color = get_color_at_pos(
-            x - rect.x,
-            y - rect.y,
-            rect.width,
-            rect.height,
-            is_file
-        );
-        buf.get_mut(x, y)
-            .set_symbol(symbol)
+    // Draw borders with thick lines
+    for x in rect.x..=rect.x + rect.width {
+        let color = get_color_at_pos(x - rect.x, 0, rect.width, rect.height, is_file);
+        buf.get_mut(x, rect.y)
+            .set_symbol("━")
+            .set_style(Style::default().fg(color));
+        buf.get_mut(x, rect.y + rect.height)
+            .set_symbol("━")
             .set_style(Style::default().fg(color));
     }
 
-    for x in rect.x + 1..rect.x + rect.width {
-        let top_color = get_color_at_pos(x - rect.x, 0, rect.width, rect.height, is_file);
-        let bottom_color = get_color_at_pos(x - rect.x, rect.height - 1, rect.width, rect.height, is_file);
-        
-        buf.get_mut(x, rect.y)
-            .set_symbol("─")
-            .set_style(Style::default().fg(top_color));
-        buf.get_mut(x, rect.y + rect.height)
-            .set_symbol("─")
-            .set_style(Style::default().fg(bottom_color));
+    for y in rect.y..=rect.y + rect.height {
+        let color = get_color_at_pos(0, y - rect.y, rect.width, rect.height, is_file);
+        buf.get_mut(rect.x, y)
+            .set_symbol("┃")
+            .set_style(Style::default().fg(color));
+        buf.get_mut(rect.x + rect.width, y)
+            .set_symbol("┃")
+            .set_style(Style::default().fg(color));
     }
 
-    for y in rect.y + 1..rect.y + rect.height {
-        let left_color = get_color_at_pos(0, y - rect.y, rect.width, rect.height, is_file);
-        let right_color = get_color_at_pos(rect.width - 1, y - rect.y, rect.width, rect.height, is_file);
-        
-        buf.get_mut(rect.x, y)
-            .set_symbol("│")
-            .set_style(Style::default().fg(left_color));
-        buf.get_mut(rect.x + rect.width, y)
-            .set_symbol("│")
-            .set_style(Style::default().fg(right_color));
-    }
+    // Draw corners with thick borders
+    let corner_color = get_color_at_pos(0, 0, rect.width, rect.height, is_file);
+    buf.get_mut(rect.x, rect.y)
+        .set_symbol("┏")
+        .set_style(Style::default().fg(corner_color));
+    buf.get_mut(rect.x + rect.width, rect.y)
+        .set_symbol("┓")
+        .set_style(Style::default().fg(corner_color));
+    buf.get_mut(rect.x, rect.y + rect.height)
+        .set_symbol("┗")
+        .set_style(Style::default().fg(corner_color));
+    buf.get_mut(rect.x + rect.width, rect.y + rect.height)
+        .set_symbol("┛")
+        .set_style(Style::default().fg(corner_color));
 }
 
 pub fn draw_tile_text_on_grid(buf: &mut Buffer, tile: &Tile, selected: bool) {
