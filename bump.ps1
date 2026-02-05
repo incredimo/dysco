@@ -23,6 +23,9 @@ if ($existingTags -contains $newVersion) {
 # Update version in Cargo.toml
 (Get-Content Cargo.toml) -replace "version = `"$version`"", "version = `"$newVersion`"" | Set-Content Cargo.toml
 
+# Update Cargo.lock to match the new version
+cargo check
+
 # Automatically commit all changes
 git add .
 git commit -m "Bump version to $newVersion"
