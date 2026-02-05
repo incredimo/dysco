@@ -9,7 +9,7 @@ Where did my disk space go?
 You can install `dysco` seamlessly using the following PowerShell one-liner. It downloads the latest release and adds it to your PATH.
 
 ```powershell
-iwr -useb https://raw.githubusercontent.com/incredimo/dysco/main/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/incredimo/dysco/refs/heads/master/install.ps1 | iex
 ```
 
 ### From Source (All Platforms)
