@@ -28,8 +28,8 @@ git add .
 git commit -m "Bump version to $newVersion"
 
 # Tag and push
-git tag -a $newVersion -m "version $newVersion"
-git push origin $newVersion
+git tag -a "v$newVersion" -m "version v$newVersion"
+git push origin "v$newVersion"
 
 # Cargo publish with --allow-dirty flag to include uncommitted changes
 cargo publish --allow-dirty
